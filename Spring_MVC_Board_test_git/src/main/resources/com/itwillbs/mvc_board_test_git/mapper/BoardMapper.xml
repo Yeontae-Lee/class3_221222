@@ -1,0 +1,278 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE mapper PUBLIC "-//mybatis.org//DTD Mapper 3.0//EN" "http://mybatis.org/dtd/mybatis-3-mapper.dtd" >
+<mapper namespace="com.itwillbs.mvc_board_test_git.mapper.BoardMapper">
+	<!-- 게시물 등록 작업을 위한 insert 태그 -->
+	<!-- 
+	새 글 번호 계산을 위해 기존 게시물의 가장 큰 글 번호(board_num)를 조회한 후
+	글 번호가 존재할 경우 +1 값을 새 글 번호로 설정 후 INSERT 구문에 사용
+	=> insert 태그 내에서 <selectKey> 태그를 사용하여 SELECT 구문을 실행하고
+	   SELECT 구문을 통해 조회된 결과값을 INSERT 구문에 반영 가능
+	
+	< 기본 문법 >
+	<insert id="xxx"> 
+		<selectKey keyProperty="값을 저장할 변수명" resultType="조회 결과 타입" order="실행 시점">
+			실행할 SELECT 구문
+		</selectKey>
+		...INSERT 구문...
+	</insert>
+	=> keyProperty 속성 : 조회 데이터를 저장할 VO 객체의 실제 변수명 => 주의!!!!
+	                      (나중에 #{변수명} 으로 사용 가능)
+	=> resultType 속성 : SELECT 구문 실행 시 기대되는 조회 결과(리턴값)의 타입
+	                     (integer(int), string 등)
+	=> order 속성 : 해당 SELECT 구문 실행할 시점
+	                1) BEFORE : INSERT 구문 실행 전 SELECT 구문 실행
+	                2) AFTER : INSERT 구문 실행 후 SELECT 구문 실행
+	
+	-->
+	<insert id="insertBoard">
+		<!-- INSERT 구문 실행 전 수행할 SELECT 구문을 기술 -->
+		<selectKey keyProperty="board_num" resultType="int" order="BEFORE">
+			<!-- 가장 큰 글번호(board_num) 조회 -->
+			<!-- 단, 첫 글일 경우 글번호가 null 이므로 기본값 1로 설정위해 IFNULL(MySQL) 또는 NVL(Oracle) 사용 -->
+			SELECT IFNULL(MAX(board_num), 1) FROM board
+		</selectKey>
+		<!-- SELECT 구문에서 실행된 조회 결과(가장 큰 글번호)가 board_num 변수에 저장됨 -->
+		INSERT
+			INTO board
+			VALUES (
+				#{board_num} + 1
+				,#{board_name}			
+				,#{board_pass}			
+				,#{board_subject}			
+				,#{board_content}			
+				,#{board_file}			
+				,#{board_real_file}      
+				,#{board_num} + 1        -- board_re_ref
+				,0                       -- board_re_lev
+				,0
+				,0
+				,now()		
+			)
+	</insert>
+	
+	<!-- 전체 게시물 목록 조회하는 select 태그 -->
+	<select id="selectBoardList" resultType="com.itwillbs.mvc_board_test_git.vo.BoardVO">
+		SELECT *
+			FROM board -- 이후 작업 분기 일어남
+		<!-- 
+		조건에 따른 SQL 구문을 실행하기 위해서는
+		choose, when, otherwise 태그를 사용하여 복수개의 조건 판별(if ~ else if 문 구조) 
+		-->	
+		<!-- 1. 검색어(keyword) 가 널스트링이 아닐 때 검색어 추가 WHERE 절 수행, 아니면 생략 -->
+		<!-- => 조건이 하나일 경우 if 태그를 사용하여 단일 조건 판별(if 문 구조) -->
+		<if test="!keyword.equals('')">
+			WHERE
+			<!-- 2. 검색타입(searchType) 에 따른 WHERE 대상 변경 -->
+			<!-- => 조건이 복수개이므로 choose 태그 사용 -->
+			<choose>
+				<when test="searchType.equals('subject')">
+					board_subject LIKE '%${keyword}%'
+				</when>
+				<when test="searchType.equals('content')">
+					board_content LIKE '%${keyword}%'
+				</when>
+				<when test="searchType.equals('subject_content')">
+					board_subject LIKE '%${keyword}%' 
+					OR board_content LIKE '%${keyword}%'
+				</when>
+				<when test="searchType.equals('name')">
+					board_name LIKE '%${keyword}%'
+				</when>
+			</choose>		
+		</if>
+		ORDER BY
+			board_re_ref DESC
+			, board_re_seq ASC
+		LIMIT 
+			#{startRow}
+			, #{listLimit}
+	</select>
+	
+	<!-- 전체 게시물 목록 갯수 조회하는 select 태그 -->
+	<select id="selectBoardListCount" resultType="int">
+		SELECT COUNT(*)
+			FROM board -- 이후 작업 분기 일어남
+			<if test="!keyword.equals('')">
+				WHERE
+				<!-- 2. 검색타입(searchType) 에 따른 WHERE 대상 변경 -->
+				<!-- => 조건이 복수개이므로 choose 태그 사용 -->
+				<choose>
+					<when test="searchType.equals('subject')">
+						board_subject LIKE '%${keyword}%'
+					</when>
+					<when test="searchType.equals('content')">
+						board_content LIKE '%${keyword}%'
+					</when>
+					<when test="searchType.equals('subject_content')">
+						board_subject LIKE '%${keyword}%' 
+						OR board_content LIKE '%${keyword}%'
+					</when>
+					<when test="searchType.equals('name')">
+						board_name LIKE '%${keyword}%'
+					</when>
+				</choose>		
+			</if>
+	</select>
+	
+	<!-- 게시물 1개 정보를 조회하는 select 태그 -->
+	<select id="selectBoard" resultType="com.itwillbs.mvc_board_test_git.vo.BoardVO">
+		SELECT *
+			FROM board
+			WHERE
+				board_num = #{board_num}
+	</select>
+	
+	<!-- 조회수 증가하는 update 태그 -->
+	<update id="updateReadcount">
+		UPDATE board
+			SET
+				board_readcount = board_readcount + 1
+			WHERE
+				board_num = #{board_num}
+	</update>
+	
+	<!-- 게시물 패스워드 판별하는 select 태그 -->
+	<!-- 조회 결과가 단일 컬럼이라도 VO 객체에 저장 가능 -->
+	<select id="selectBoardWriter" resultType="com.itwillbs.mvc_board_test_git.vo.BoardVO">
+		SELECT board_name
+			FROM board
+			WHERE
+				board_num = #{board_num}
+				AND board_pass = #{board_pass}
+	</select>
+	
+	<!-- 게시물 파일명 조회하는 select 태그 -->
+	<select id="selectRealFile" resultType="string">
+		SELECT board_real_file
+			FROM board
+			WHERE
+				board_num = #{board_num}
+	</select>
+	
+	<!-- 게시물 삭제하는 delete 태그 -->
+	<delete id="deleteBoard">
+		DELETE 
+			FROM board
+			WHERE
+				board_num = #{board_num}
+	</delete>
+	
+	<!-- 게시물 수정하는 update 태그 -->
+	<!-- 단, 게시물 수정 전 기존 실제 파일명을 조회하여 기존 파일명 + 새 파일명으로 수정-->
+<!-- 	<update id="updateBoard"> -->
+<!-- 		<selectKey keyProperty="board_real_file" resultType="string" order="BEFORE"> -->
+<!-- 			SELECT board_real_file -->
+<!-- 				FROM board -->
+<!-- 				WHERE board_num = #{board.board_num} -->
+<!-- 		</selectKey> -->
+<!-- 		UPDATE board -->
+<!-- 			SET -->
+<!-- 				board_name = #{board.board_name} -->
+<!-- 				, board_subject = #{board.board_subject} -->
+<!-- 				, board_content = #{board.board_content} -->
+<!-- 				, board_real_file = CONCAT(#{board.board_real_file}, #{board_real_file}) -->
+<!-- 			WHERE -->
+<!-- 				board_num = #{board.board_num} -->
+<!-- 	</update> -->
+
+	<update id="updateBoard">
+		UPDATE board
+			SET
+				board_name = #{board.board_name}
+				, board_subject = #{board.board_subject}
+				, board_content = #{board.board_content}
+				, board_real_file = CONCAT(board_real_file, #{board_real_file}) -- UPDATE 구문일 경우에만 컬럼명 지정으로 기존 데이터 접근 가능
+			WHERE
+				board_num = #{board.board_num}
+	</update>
+	
+	<!--
+	답글 등록 전 기존 답글들에 대한 순서번호(board_re_seq) 조정 - UPDATE
+	=> 원본글의 참조글번호(board_re_ref)와 같고
+	   원본글의 순서번호(board_re_seq) 보다 큰 레코드들의
+	   순서번호를 + 1 씩 증가시키기
+	-->
+	<update id="updateBoardReSeq">
+		UPDATE board
+			SET
+				board_re_seq = board_re_seq + 1
+			WHERE
+				board_re_ref = #{board_re_ref}
+				AND board_re_seq > #{board_re_seq}
+	</update>
+	
+	<!-- 
+	답글 등록 - INSERT
+	=> 단, INSERT 작업 실행 전 먼저 SELECT 구문을 통해 글번호(board_num) 의 최대값 조회 후
+	   INSERT 시 board_num 값 + 1 값을 새 글 번호로 설정
+	=> 또한, INSERT 과정에서 들여쓰기레벨(board_re_lev)과 순서번호(board_re_seq)는
+	   전달받은 값 + 1 값을 사용
+	-->
+	<insert id="insertReplyBoard">
+		<selectKey keyProperty="board_num" resultType="int" order="BEFORE">
+			<!-- 가장 큰 글번호(board_num) 조회 -->
+			SELECT IFNULL(MAX(board_num), 1) FROM board
+		</selectKey>
+		INSERT
+			INTO board
+			VALUES (
+				#{board_num} + 1
+				,#{board_name}			
+				,#{board_pass}			
+				,#{board_subject}			
+				,#{board_content}			
+				,#{board_file}			
+				,#{board_real_file}
+				,#{board_re_ref}  
+				,#{board_re_lev} + 1
+				,#{board_re_seq} + 1
+				,0 			
+				,now()		
+			)
+	</insert>
+
+	<!-- 기존 파일명에서 삭제할 파일명을 제거(일부 제거) - UPDATE -->
+	<!-- MySQL 의 replace() 함수를 사용하여 실제 파일명을 널스트링("") 으로 대체 -->
+	<!-- UPDATE 구문에서 SET 컬럼명 = REPLACE(대상컬럼명, 대상파일명, 대체할문자열) -->
+	<update id="deleteBoardFile">
+		UPDATE board
+			SET board_real_file = REPLACE(board_real_file, CONCAT(#{fileName}, "/"), "")
+			WHERE board_num = #{board_num}
+	</update>
+	
+	<!-- ==================== JSON 데이터 요청에 대한 처리 ==================== -->
+	<!-- 가져온 데이터를 SELECT 구문 내의 WHERE 절에서 복합 조건(IN)으로 사용 시 -->
+	<!-- 가져온 데이터 중에서 글번호(board_num) 여러개에 대한 레코드 조회 수행 -->
+	<select id="selectBoardList2" resultType="com.itwillbs.mvc_board_test_git.vo.BoardVO">
+		SELECT *
+			FROM board
+			WHERE 
+				board_num IN
+					<!-- collection 속성에 list 명시하여 리스트 계열 객체를 표시 -->
+					<!-- open 속성에 "(", close 속성에 ")", 지정하여 IN 절 뒤의 괄호 표시하고 -->
+					<!-- () 내부의 항목별 구분자(seperator 속성)로 "," 를 사용 -->
+	<!-- 				<foreach item="board" collection="list" open="board_num IN (" close=")" separator=","> -->
+					<foreach item="board" collection="list" open="(" close=")" separator=",">
+						<!-- item 속성에 지정한 이름으로 객체를 다룰 수 있다! -->
+						#{board.board_num}
+					</foreach>
+	</select>
+	
+</mapper>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
