@@ -28,6 +28,8 @@
 		<hr>
 		<h3>추가됨? - sts55</h3>
 		<h3>추가됨? - sts_branch_lyt_sts</h3>
+		<hr>
+		<h3>revert commit 확인용</h3>
 	</article>
 </body>
 </html>
