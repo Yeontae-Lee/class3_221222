@@ -26,7 +26,6 @@
 		<h3><a href="BoardList.bo">글목록</a></h3>
 		<h3><a href="BoardList2.bo">글목록2(JSON 데이터 생성)</a></h3>
 		<hr>
-		<h3>추가됨? - sts</h3>
 	</article>
 </body>
 </html>
